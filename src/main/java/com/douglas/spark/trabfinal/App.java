@@ -18,8 +18,10 @@ import org.apache.spark.ml.feature.ChiSqSelector;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.IDF;
 import org.apache.spark.ml.feature.NGram;
+import org.apache.spark.ml.feature.OneHotEncoder;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.ml.feature.Tokenizer;
+import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.ml.feature.Word2Vec;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.regression.RandomForestRegressor;
@@ -178,6 +180,7 @@ public class App {
 				.setLabelCol("label");*/
 		
 		LinearSVC ls = new LinearSVC()
+				.setWeightCol("wght")
 				.setLabelCol("label");
 		
 		StringIndexer categoryIndexer = new StringIndexer()
@@ -197,17 +200,27 @@ public class App {
 			  .setInputCol("ngrams")			  
 			  .setOutputCol("col_htf");
 		
-		/*Word2Vec w2V = new Word2Vec()
-				  .setInputCol("ngrams")
-				  .setOutputCol("features")
+		Word2Vec w2v = new Word2Vec()
+				  .setInputCol("words")
+				  .setOutputCol("col_w2v")
 				  .setNumPartitions(1)
+				  .setMaxIter(1)
+				  .setVectorSize(16384)
 				  .setSeed(0)
-				  .setMinCount(5);*/
+				  .setMinCount(5);
 				
 		IDF idf = new IDF()
 				.setInputCol(hashingTF.getOutputCol())
-				.setOutputCol("features")
+				.setOutputCol("col_idf")
 				.setMinDocFreq(0);
+		
+		OneHotEncoder ohe = new OneHotEncoder()
+				.setInputCol("label")
+				.setOutputCol("col_ohe");
+		
+		VectorAssembler va = new VectorAssembler()
+				.setInputCols(new String[] {"col_idf","col_w2v","col_ohe"})
+				.setOutputCol("features");
 		
 		/*ChiSqSelector sel = new ChiSqSelector()
 				  .setNumTopFeatures(6850)
@@ -215,8 +228,11 @@ public class App {
 				  .setLabelCol("label")
 				  .setOutputCol("features");*/
 				
+		/*Pipeline pipeline = new Pipeline()
+				  .setStages(new PipelineStage[] {categoryIndexer, tokenizer, ngram, hashingTF, idf, ls});*/
+		
 		Pipeline pipeline = new Pipeline()
-				  .setStages(new PipelineStage[] {categoryIndexer, tokenizer, ngram, hashingTF, idf, ls});
+		  .setStages(new PipelineStage[] {categoryIndexer, tokenizer, ngram, hashingTF, idf, w2v, ohe, va, ls});
 		
 		MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
 				.setLabelCol("label")
@@ -287,7 +303,7 @@ public class App {
 			predicoes.write().save(predicoesNome);
 		}
 				
-		predicoes.show();
+		//predicoes.show();
 		
 		Dataset<Tuple2<Object, Object>> predicoesTuple2 = paraTuple2(predicoes, "prediction", "label");
 		
